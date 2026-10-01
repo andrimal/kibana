@@ -21,6 +21,12 @@ function getExpressionForLayer(
     return null;
   }
 
+  // A date column without a field name (e.g. an API-built metric trendline) can only be resolved
+  // once the time field is known; without one the layer cannot be queried.
+  if (layer.columns.some((col) => col.meta?.type === 'date' && !col.fieldName)) {
+    return null;
+  }
+
   let idMapper: Record<string, OriginalColumn[]> = {};
   layer.columns.forEach((col) => {
     // Only pick fields that OriginalColumn declares; the Omit<> drops the

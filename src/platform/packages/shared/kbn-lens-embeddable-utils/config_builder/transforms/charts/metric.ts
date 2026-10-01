@@ -775,7 +775,6 @@ function buildEsqlTrendlineLayer(
   const timeField =
     mainLayer.timeField ??
     (queryHasTsSourceCommand(dataSource.query) ? LENS_DEFAULT_TIME_FIELD : undefined);
-  if (!timeField) return undefined;
 
   const metricColumn = mainLayer.columns.find((c) => c.columnId === getAccessorName('metric'));
   const secondaryColumn = mainLayer.columns.find(
@@ -788,22 +787,27 @@ function buildEsqlTrendlineLayer(
   // Build the trendline query: take the main query and add time bucketing.
   // For queries without STATS, raw metric columns are aggregated and breakdown
   // columns are preserved in BY so the generated query columns match the layer columns.
-  let trendlineQueryResult: ReturnType<typeof buildTrendlineQueryWithMetricFieldMap>;
-  try {
-    trendlineQueryResult = buildTrendlineQueryWithMetricFieldMap(
-      dataSource.query,
-      timeField,
-      [metricColumn, secondaryColumn]
-        .filter((c): c is TextBasedLayerColumn => Boolean(c))
-        .map((c) => c.fieldName),
-      breakdownColumn ? [breakdownColumn.fieldName] : []
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to build ES|QL trendline query for metric chart: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
+  // When the time field cannot be inferred from the query, it is only known once Lens resolves
+  // the ad hoc data view at runtime: the layer keeps the main query and an empty time column,
+  // and Lens derives the bucketed query from the linked main layer.
+  let trendlineQueryResult: ReturnType<typeof buildTrendlineQueryWithMetricFieldMap> | undefined;
+  if (timeField) {
+    try {
+      trendlineQueryResult = buildTrendlineQueryWithMetricFieldMap(
+        dataSource.query,
+        timeField,
+        [metricColumn, secondaryColumn]
+          .filter((c): c is TextBasedLayerColumn => Boolean(c))
+          .map((c) => c.fieldName),
+        breakdownColumn ? [breakdownColumn.fieldName] : []
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to build ES|QL trendline query for metric chart: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   // Build trendline columns: time bucket + copies of metric columns from main layer.
@@ -811,7 +815,7 @@ function buildEsqlTrendlineLayer(
   // map to their actual ES|QL result field.
   const timeColumn: TextBasedLayerColumn = {
     columnId: HISTOGRAM_COLUMN_NAME,
-    fieldName: trendlineQueryResult.timeField,
+    fieldName: trendlineQueryResult?.timeField ?? '',
     meta: { type: 'date' },
   };
 
@@ -823,7 +827,7 @@ function buildEsqlTrendlineLayer(
             ...metricColumn,
             columnId: `${ACCESSOR}_trendline`,
             fieldName:
-              trendlineQueryResult.metricFieldMap.get(metricColumn.fieldName) ??
+              trendlineQueryResult?.metricFieldMap.get(metricColumn.fieldName) ??
               metricColumn.fieldName,
           },
         ]
@@ -836,7 +840,7 @@ function buildEsqlTrendlineLayer(
       ...secondaryColumn,
       columnId: `${getAccessorName('secondary')}_trendline`,
       fieldName:
-        trendlineQueryResult.metricFieldMap.get(secondaryColumn.fieldName) ??
+        trendlineQueryResult?.metricFieldMap.get(secondaryColumn.fieldName) ??
         secondaryColumn.fieldName,
     });
   }
@@ -855,8 +859,8 @@ function buildEsqlTrendlineLayer(
   return {
     layer: {
       index: dataViewId,
-      query: { esql: trendlineQueryResult.query },
-      timeField,
+      query: { esql: trendlineQueryResult?.query ?? dataSource.query },
+      ...(timeField ? { timeField } : {}),
       columns: trendlineColumns,
     },
     dataViewId,

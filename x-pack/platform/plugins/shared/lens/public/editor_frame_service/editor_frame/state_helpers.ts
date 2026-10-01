@@ -35,7 +35,9 @@ import type {
   DocumentToExpressionReturnType,
   LensDocument,
   TextBasedPersistedState,
+  Visualization,
 } from '@kbn/lens-common';
+import { LENS_DATASOURCE_ID } from '@kbn/lens-common';
 import { COLOR_MAPPING_OFF_BY_DEFAULT } from '../../../common/constants';
 
 import { buildExpression } from './expression_helpers';
@@ -321,8 +323,58 @@ export async function initializeSources(
     indexPatterns,
     indexPatternRefs,
     annotationGroups,
-    datasourceStates: syncedDatasourceStates,
+    datasourceStates: syncLinkedTextBasedLayers({
+      datasourceMap,
+      datasourceStates: syncedDatasourceStates,
+      visualization: visualizationState.activeId
+        ? visualizationMap[visualizationState.activeId]
+        : undefined,
+      visualizationState: runtimeVisualizationState,
+      indexPatterns,
+    }),
     visualizationState: runtimeVisualizationState,
+  };
+}
+
+/**
+ * Syncs ES|QL layers linked to another layer (e.g. a metric trendline) once their time field has
+ * been hydrated, so layers persisted without a resolvable time field can derive their query.
+ */
+export function syncLinkedTextBasedLayers({
+  datasourceMap,
+  datasourceStates,
+  visualization,
+  visualizationState,
+  indexPatterns,
+}: {
+  datasourceMap: DatasourceMap;
+  datasourceStates: DatasourceStates;
+  visualization: Visualization | undefined;
+  visualizationState: unknown;
+  indexPatterns: IndexPatternMap;
+}): DatasourceStates {
+  const textBasedDatasource = datasourceMap[LENS_DATASOURCE_ID.TEXT_BASED];
+  const textBasedState = datasourceStates[LENS_DATASOURCE_ID.TEXT_BASED];
+  const links = (visualization?.getLinkedDimensions?.(visualizationState) ?? []).flatMap(
+    ({ from, to }) => (to.columnId ? [{ from, to: { ...to, columnId: to.columnId } }] : [])
+  );
+
+  if (!textBasedDatasource || !textBasedState?.state || links.length === 0) {
+    return datasourceStates;
+  }
+
+  return {
+    ...datasourceStates,
+    [LENS_DATASOURCE_ID.TEXT_BASED]: {
+      ...textBasedState,
+      state: textBasedDatasource.syncColumns({
+        state: textBasedState.state,
+        links,
+        // The text-based datasource does not reorder columns by dimension group.
+        getDimensionGroups: () => [],
+        indexPatterns,
+      }),
+    },
   };
 }
 
@@ -465,7 +517,7 @@ export async function persistedStateToExpression(
     },
     { isFullEditor: false }
   );
-  const datasourceStates = initializeDatasources({
+  const initializedDatasourceStates = initializeDatasources({
     datasourceMap,
     datasourceStates: datasourceStatesFromSO,
     references: [...references, ...(internalReferences || [])],
@@ -480,9 +532,17 @@ export async function persistedStateToExpression(
       activeId: visualizationType,
       selectedLayerId: null,
     },
-    datasourceStates,
+    datasourceStates: initializedDatasourceStates,
     annotationGroups,
     references: [...references, ...(internalReferences || [])],
+  });
+
+  const datasourceStates = syncLinkedTextBasedLayers({
+    datasourceMap,
+    datasourceStates: initializedDatasourceStates,
+    visualization,
+    visualizationState: activeVisualizationState,
+    indexPatterns,
   });
 
   const datasourceLayers = getDatasourceLayers(datasourceStates, datasourceMap, indexPatterns);

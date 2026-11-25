@@ -14,6 +14,7 @@ import type {
 } from './dashboard_schema_types';
 import {
   dashboardAttachmentDataSchema,
+  optionsSchema,
   panelGridSchema,
   sectionGridSchema,
   timeRangeSchema,
@@ -26,6 +27,7 @@ import {
 export type { DashboardAttachmentData, AttachmentPanel, DashboardSection };
 export {
   dashboardAttachmentDataSchema,
+  optionsSchema,
   panelGridSchema,
   sectionGridSchema,
   timeRangeSchema,

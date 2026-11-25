@@ -11,6 +11,7 @@ export {
   panelGridSchema,
   sectionGridSchema,
   timeRangeSchema,
+  optionsSchema,
   dashboardAttachmentDataSchema,
   isSection,
 } from './types';

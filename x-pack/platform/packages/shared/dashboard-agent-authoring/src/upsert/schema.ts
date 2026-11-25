@@ -6,10 +6,10 @@
  */
 
 import { z, lazySchema } from '@kbn/zod/v4';
-import { timeRangeSchema } from '@kbn/agent-builder-dashboards-common';
+import { optionsSchema, timeRangeSchema } from '@kbn/agent-builder-dashboards-common';
 import { controlInputSchema } from '../controls';
 import { upsertPanelContentSchema } from '../panels';
-import { upsertOptionsSchema, upsertRefreshIntervalSchema } from '../settings';
+import { upsertRefreshIntervalSchema } from '../settings';
 
 const idSchema = z.string().min(1).max(256);
 
@@ -72,10 +72,12 @@ export const upsertDashboardSchema = lazySchema(() =>
       .describe(
         'Set ONLY when the user asks for a time window (e.g. "last 7 days"); otherwise omit it and a data-aware default is applied. The screen context time range is not a request unless the user refers to it. Use Kibana date math or ISO 8601, e.g. { from: "now-7d", to: "now" } or { from: "2024-05-20T00:00:00.000Z", to: "2024-05-24T23:59:59.999Z", mode: "absolute" }.'
       ),
-    options: upsertOptionsSchema
+    // Loose, so an unknown key reaches the dashboard validator, which reports it at its path.
+    options: optionsSchema
+      .loose()
       .optional()
       .describe(
-        'Display and behavior settings. Set ONLY the keys the user asks to change; the other keys keep their current values.'
+        'Display and behavior settings. Set ONLY the keys the user asks to change; the others stay as they are.'
       ),
     refresh_interval: upsertRefreshIntervalSchema
       .optional()

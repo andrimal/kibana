@@ -99,7 +99,7 @@ export const executeDashboardUpsert = async ({
     dashboardData ?? { title: 'User Dashboard', description: undefined, panels: [] }
   );
   const original = indexDashboard(originalDashboardData);
-  const plan = planUpsert({ original, originalOptions: originalDashboardData.options, upsert });
+  const plan = planUpsert({ original, upsert });
   const { panels, controls, failures } = await resolvePlan({
     panels: plan.panels,
     controls: plan.controls,

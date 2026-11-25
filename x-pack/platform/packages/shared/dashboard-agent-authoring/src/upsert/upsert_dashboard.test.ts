@@ -322,18 +322,19 @@ describe('executeDashboardUpsert', () => {
       expect(result.dashboardData).toEqual({ ...dashboardWithSettings, title: 'Renamed' });
     });
 
-    it('leaves out tooltip sync turned on while cursor sync is off', async () => {
+    it('keeps tooltip sync off while cursor sync stays off', async () => {
       const result = await executeDashboardUpsert({
         dashboardData: dashboardWithSettings,
         upsert: { options: { sync_tooltips: true } },
         logger,
       });
 
-      expect(result.dashboardData).toEqual(dashboardWithSettings);
-      expect(result.dashboardData.options).not.toHaveProperty('sync_tooltips');
-      expect(result.failures).toEqual([
-        expect.objectContaining({ kind: 'dashboard', identifier: 'options.sync_tooltips' }),
-      ]);
+      expect(result.failures).toEqual([]);
+      expect(result.dashboardData.options).toEqual({
+        use_margins: false,
+        sync_cursor: false,
+        sync_tooltips: false,
+      });
     });
 
     it('turns tooltip sync off when the call turns cursor sync off', async () => {
@@ -350,7 +351,7 @@ describe('executeDashboardUpsert', () => {
       expect(result.dashboardData.options).toEqual({ sync_cursor: false, sync_tooltips: false });
     });
 
-    it('applies neither sync option when the call turns cursor sync off and tooltip sync on', async () => {
+    it('turns tooltip sync off when the call turns cursor sync off and tooltip sync on', async () => {
       const result = await executeDashboardUpsert({
         dashboardData: {
           ...dashboardWithSettings,
@@ -360,18 +361,12 @@ describe('executeDashboardUpsert', () => {
         logger,
       });
 
+      expect(result.failures).toEqual([]);
       expect(result.dashboardData.options).toEqual({
-        sync_cursor: true,
-        sync_tooltips: true,
+        sync_cursor: false,
+        sync_tooltips: false,
         hide_panel_titles: true,
       });
-      expect(result.failures).toEqual([
-        expect.objectContaining({
-          kind: 'dashboard',
-          identifier: 'options.sync_tooltips',
-          error: expect.stringContaining('because they conflict'),
-        }),
-      ]);
     });
   });
 
